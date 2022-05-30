@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\DishCreateRequest;
+use App\Models\Category;
 use App\Models\Dish;
+use App\Models\Order;
 use Illuminate\Http\Request;
 
 class DishesController extends Controller
@@ -12,10 +15,15 @@ class DishesController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
+    public function __construct()
+    {
+        $this->middleware('auth');
+    }
+
     public function index()
     {
         $dishes = Dish::all();
-        return view('kitchen.dish',compact($dishes));
+        return view('kitchen.dish',compact('dishes'));
     }
 
     /**
@@ -25,7 +33,8 @@ class DishesController extends Controller
      */
     public function create()
     {
-        //
+        $categories = Category::all();
+        return view('kitchen.dish_create',compact('categories'));
     }
 
     /**
@@ -34,9 +43,18 @@ class DishesController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-    public function store(Request $request)
+    public function store(DishCreateRequest $request)
     {
-        //
+        $dish = new Dish();
+        $dish->name = $request->name;
+        $dish->category_id = $request->category;
+
+        $imageName = date('dmyhms') . '.' . request()->dishimage->getClientOriginalExtension();
+        request()->dishimage->move(public_path('images'),$imageName);
+
+        $dish->image = $imageName;
+        $dish->save();
+        return redirect('/dish')->with('success','New dish is successfully created');
     }
 
     /**
@@ -56,9 +74,10 @@ class DishesController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function edit($id)
+    public function edit(Dish $dish)
     {
-        //
+        $categories = Category::all();
+        return view('kitchen.dish_edit',compact('dish','categories'));
     }
 
     /**
@@ -68,9 +87,25 @@ class DishesController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function update(Request $request, $id)
+    public function update(Request $request, Dish $dish)
     {
-        //
+        request()->validate([
+            'name' => 'required',
+            'category' => 'required',
+            'dishimage' => 'image'
+        ]);
+
+        $dish->name = $request->name;
+        $dish->category_id = $request->category;
+
+        if($request->dishimage){
+            $imageName = date('dmyhms') . '.' . request()->dishimage->getClientOriginalExtension();
+            request()->dishimage->move(public_path('images'),$imageName);
+            $dish->image = $imageName;
+        }
+
+        $dish->save();
+        return redirect('/dish')->with('info','Dish updated successfully');
     }
 
     /**
@@ -79,8 +114,38 @@ class DishesController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function destroy($id)
+    public function destroy(Dish $dish)
     {
-        //
+        $dish->delete($dish);
+        return redirect('/dish')->with('delete','Dish has been deleted.');
+    }
+
+    public function order(){
+        $rawstatus = config('res.order_status');
+        $status = array_flip($rawstatus);
+        $orders = Order::whereIn('status',[1,2])->get();
+        return view('kitchen.order',compact('orders','status'));
+    }
+
+    public function approve(Order $order){
+        $order->status = config('res.order_status.processing');
+        $order->save();
+        return redirect('/order')->with('info','Order is approved');
+    }
+
+    public function cancel(Order $order){
+        $order->status = config('res.order_status.cancel');
+        $order->save();
+        return redirect('/order')->with('info','Order is rejected');
+    }
+
+    public function ready(Order $order){
+        $order->status = config('res.order_status.ready');
+        $order->save();
+        return redirect('/order')->with('info','Order is ready');
+    }
+
+    public function done(Order $order){
+        
     }
 }
